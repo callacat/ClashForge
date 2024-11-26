@@ -33,24 +33,27 @@ ENV TARGETARCH=${TARGETARCH:-amd64}
 
 # 预下载并保存 clash 二进制文件
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        DOWNLOAD_URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | \
-        jq -r '.assets[] | select(.name | contains("amd64")) | .browser_download_url'); \
+        DOWNLOAD_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.18.10/mihomo-linux-amd64-compatible-v1.18.10.gz"; \
         FILENAME="clash-linux-amd64.gz"; \
+        EXPECTED_BINARY_NAME="clash-linux-amd64"; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        DOWNLOAD_URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | \
-        jq -r '.assets[] | select(.name | contains("arm64")) | .browser_download_url'); \
+        DOWNLOAD_URL="https://github.com/MetaCubeX/mihomo/releases/download/v1.18.10/mihomo-linux-arm64-v1.18.10.gz"; \
         FILENAME="clash-linux-arm64.gz"; \
+        EXPECTED_BINARY_NAME="clash-linux-arm64"; \
     else \
         echo "Unsupported architecture: $TARGETARCH"; \
         exit 1; \
     fi && \
     curl -L -o "$FILENAME" "$DOWNLOAD_URL" && \
     chmod +x "$FILENAME" && \
-    # 解压文件
-    if [[ "$FILENAME" == *.gz ]]; then \
-        gunzip "$FILENAME"; \
-        mv "clash-linux-amd64" "clash"; \
-    fi
+    # 解压并重命名文件
+    if [[ "$TARGETARCH" = "amd64" ]]; then \
+        gunzip "$FILENAME" && mv "$EXPECTED_BINARY_NAME" "clash"; \
+    else \
+        gunzip "$FILENAME" && mv "$EXPECTED_BINARY_NAME" "clash"; \
+    fi && \
+    # 删除压缩包
+    rm -f "$FILENAME"
 
 # 启动脚本
 CMD ["sh", "-c", "python ClashForge.py && python upload_gist.py"]
