@@ -61,7 +61,7 @@ clash_config_template = {
     "log-level": "info",
     "external-controller": "127.0.0.1:9090",
     "geodata-mode": True,
-    'geox-url': {'geoip': 'https://gitdl.cn/https://raw.githubusercontent.com/Loyalsoldier/geoip/release/geoip.dat', 'mmdb': 'https://gitdl.cn/https://raw.githubusercontent.com/Loyalsoldier/geoip/release/GeoLite2-Country.mmdb'},
+    'geox-url': {'geoip': 'https://testingcf.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat', 'mmdb': 'https://gitdl.cn/https://raw.githubusercontent.com/Loyalsoldier/geoip/release/GeoLite2-Country.mmdb'},
     "dns": {
         "enable": True,
         "ipv6": False,
