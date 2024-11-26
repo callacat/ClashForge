@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 # 确定架构
 ARG TARGETARCH
-ENV TARGETARCH=${TARGETARCH:-amd64}  # 默认值为 amd64
+ENV TARGETARCH=${TARGETARCH:-amd64}
 
 
 # 预下载并保存 clash 二进制文件
