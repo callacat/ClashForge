@@ -7,6 +7,7 @@ WORKDIR /app
 # 安装时区数据包
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
+    curl \
     && ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && dpkg-reconfigure -f noninteractive tzdata \
     && apt-get clean \
@@ -15,12 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制依赖列表和执行文件到容器中
 COPY requirements.txt .
 COPY ClashForge.py .
+COPY upload_gist.py .
 
 # 安装依赖
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 创建 input 文件夹
-RUN mkdir input
+RUN pip install --no-cache-dir -r requirements.txt \
+    && rm -f requirements.txt \
+    mkdir input
 
 # 启动脚本
-CMD ["python", "ClashForge.py"]
+CMD ["sh", "-c", "python ClashForge.py && python upload_gist.py"]
