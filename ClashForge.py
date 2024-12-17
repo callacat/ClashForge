@@ -30,10 +30,6 @@ import warnings
 warnings.filterwarnings('ignore')
 from requests_html import HTMLSession
 
-# 存储所有节点的速度测试结果
-SPEED_TEST = True
-SPEED_TEST_LIMIT = 20 # 只测试前20个节点的下行速度，每个节点测试5秒
-results_speed = []
 # TEST_URL = "http://www.gstatic.com/generate_204"
 TEST_URL = "http://www.pinterest.com"
 CLASH_API_PORTS = [9090]
@@ -1461,7 +1457,7 @@ def process_url(url):
 
 # 解析不同的代理链接
 def parse_proxy_link(link):
-    if link.startswith("hysteria2://"):
+    if link.startswith("hysteria2://") or link.startswith("hy2://"):
         return parse_hysteria2_link(link)
     elif link.startswith("trojan://"):
         return parse_trojan_link(link)
@@ -1541,10 +1537,11 @@ def filter_by_types_alt(allowed_types,nodes):
 def merge_lists(*lists):
     return [item for item in chain.from_iterable(lists) if item != '']
 
+
 def handle_links(new_links,resolve_name_conflicts):
     try:
         for new_link in new_links:
-            if new_link.startswith(("hysteria2://", "trojan://", "ss://", "vless://", "vmess://")):
+            if new_link.startswith(("hysteria2://", "hy2://", "trojan://", "ss://", "vless://", "vmess://")):
                 node = parse_proxy_link(new_link)
                 if node:
                     resolve_name_conflicts(node)
@@ -1578,7 +1575,7 @@ def generate_clash_config(links,load_nodes):
 
 
     for link in links:
-        if link.startswith(("hysteria2://", "trojan://", "ss://", "vless://", "vmess://")):
+        if link.startswith(("hysteria2://", "hy2://","trojan://", "ss://", "vless://", "vmess://")):
             node = parse_proxy_link(link)
             resolve_name_conflicts(node)
         else:
@@ -1767,6 +1764,7 @@ def read_output(pipe, output_lines):
         else:
             break
 
+
 def start_clash():
     download_and_extract_latest_release()
     system_platform = platform.system().lower()
@@ -1824,6 +1822,7 @@ def start_clash():
             clash_process.kill()
             continue
         return clash_process
+
 
 def is_clash_api_running():
     try:
@@ -1901,9 +1900,12 @@ class ClashAPI:
 
     async def get_proxies(self) -> Dict:
         """获取所有代理节点信息"""
+        if not self.base_url:
+            raise ClashAPIException("未建立与 Clash API 的连接")
+
         try:
             response = await self.client.get(
-                f"http://{CLASH_API_HOST}:{CLASH_API_PORTS[0]}/proxies",
+                f"{self.base_url}/proxies",
                 headers=self.headers
             )
             response.raise_for_status()
@@ -2020,12 +2022,11 @@ class ClashConfig:
         valid_results.sort(key=lambda x: x.delay)
 
         # 更新代理组
-        proxy_names = [r.name for r in valid_results]
         for group in self.proxy_groups:
             if group["name"] == group_name:
-                group["proxies"] = proxy_names
+                group["proxies"] = [r.name for r in valid_results]
                 break
-        return proxy_names
+
     def save(self):
         """保存配置到文件"""
         try:
@@ -2063,6 +2064,7 @@ def print_test_summary(group_name: str, results: List[ProxyTestResult]):
         sorted_results = sorted(valid_results, key=lambda x: x.delay)
         for i, result in enumerate(sorted_results[:LIMIT], 1):
             print(f"{i}. {result.name}: {result.delay:.2f}ms")
+
 
 # 测试一组代理节点
 async def test_group_proxies(clash_api: ClashAPI, proxies: List[str]) -> List[ProxyTestResult]:
@@ -2154,7 +2156,7 @@ async def proxy_clean():
                 proxy_names.add(r.name)
 
             for group_name in groups_to_test:
-                proxy_names = config.update_group_proxies(group_name, group_results)
+                config.update_group_proxies(group_name, group_results)
                 print(f"'{group_name}'已按延迟大小重新排序")
 
             if LIMIT:
@@ -2162,28 +2164,6 @@ async def proxy_clean():
 
             # 保存更新后的配置
             config.save()
-
-            if SPEED_TEST:
-                # 测速
-                print('\n===================检测节点速度======================\n')
-                sorted_proxy_names = start_download_test(proxy_names)
-                # 按测试重新排序
-                new_list = sorted_proxy_names.copy()
-                # 创建一个集合来跟踪已添加的元素
-                added_elements = set(new_list)
-                # 遍历 group_proxies，将不在 added_elements 中的元素添加到 new_list
-                group_proxies = config.get_group_proxies(group_name)
-                for item in group_proxies:
-                    if item not in added_elements:
-                        new_list.append(item)
-                        added_elements.add(item)  # 将新添加的元素加入集合中
-                # 排序好的节点名放入group-proxies
-                for group_name in groups_to_test:
-                    for group in config.proxy_groups:
-                        if group["name"] == group_name:
-                            group["proxies"] = new_list
-                # 保存更新后的配置
-                config.save()
 
             # 显示总耗时
             total_time = (datetime.now() - start_time).total_seconds()
@@ -2333,11 +2313,11 @@ def work(links,check=False,allowed_types=[],only_check=False):
                 # 切换节点到'节点选择-DIRECT'
                 switch_proxy('DIRECT')
                 asyncio.run(proxy_clean())
-                # print(f'批量检测完毕')
+                print(f'批量检测完毕')
             except Exception as e:
                 print("Error calling Clash API:", e)
             finally:
-                # print(f'关闭Clash API')
+                print(f'关闭Clash API')
                 if clash_process is not None:
                     clash_process.kill()
 
@@ -2348,78 +2328,7 @@ def work(links,check=False,allowed_types=[],only_check=False):
         print(f"程序执行失败: {e}")
         sys.exit(1)
 
-def start_download_test(proxy_names,speed_limit=0.1):
-    """
-    开始下载测试
-
-    """
-    # 第一步：测试所有节点的下载速度
-    test_all_proxies(proxy_names[:SPEED_TEST_LIMIT])
-
-    # 过滤出速度大于等于 speed_limit 的节点
-    filtered_list = [item for item in results_speed if float(item[1]) >= float(f'{speed_limit}')]
-
-    # 按下载速度从大到小排序
-    sorted_proxy_names = []
-    sorted_list = sorted(filtered_list, key=lambda x: float(x[1]), reverse=True)
-    print(f'节点速度统计:')
-    for i, result in enumerate(sorted_list[:LIMIT], 1):
-        sorted_proxy_names.append(result[0])
-        print(f"{i}. {result[0]}: {result[1]}Mb/s")
-
-    return sorted_proxy_names
-
-# 测试所有代理节点的下载速度，并排序结果
-def test_all_proxies(proxy_names):
-    try:
-        # 单线程节点速度下载测试
-        i = 0
-        for proxy_name in proxy_names:
-            i += 1
-            print(f"\r正在测速节点【{i}】: {proxy_name}", flush=True, end='')
-            test_proxy_speed(proxy_name)
-
-        print("\r" + " " * 50 + "\r", end='')  # 清空行并返回行首
-    except Exception as e:
-        print(f"测试节点速度时出错: {e}")
-
-# 测试指定代理节点的下载速度（下载5秒后停止）
-def test_proxy_speed(proxy_name):
-    # 切换到该代理节点
-    switch_proxy(proxy_name)
-    # 设置代理
-    proxies = {
-        "http": 'http://127.0.0.1:7890',
-        "https": 'http://127.0.0.1:7890',
-    }
-
-    # 开始下载并测量时间
-    start_time = time.time()
-    # 计算总下载量
-    total_length = 0
-    # 测试下载时间（秒）
-    test_duration = 5  # 逐块下载，直到达到5秒钟为止
-
-    # 不断发起请求直到达到时间限制
-    while time.time() - start_time < test_duration:
-        try:
-            response = requests.get("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", stream=True, proxies=proxies, headers={'Cache-Control': 'no-cache'},
-                                    timeout=test_duration)
-            for data in response.iter_content(chunk_size=524288):
-                total_length += len(data)
-                if time.time() - start_time >= test_duration:
-                    break
-        except Exception as e:
-            print(f"测试节点 {proxy_name} 下载失败: {e}")
-
-    # 计算速度：Bps -> MB/s
-    elapsed_time = time.time() - start_time
-    speed = total_length / elapsed_time if elapsed_time > 0 else 0
-
-    results_speed.append((proxy_name, f"{speed / 1024 / 1024:.2f}"))  # 记录速度测试结果
-    return speed / 1024 / 1024  # 返回 MB/s
-
 
 if __name__ == '__main__':
     links = []
-    work(links, check=True, only_check=False, allowed_types=["ss","hysteria2","vless","vmess","trojan"])
+    work(links, check=True, only_check=False, allowed_types=["ss","hysteria2","hy2","vless","vmess","trojan"])
