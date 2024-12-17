@@ -3,7 +3,7 @@ import requests
 import time
 
 GIST_ID = os.getenv('GIST_ID')
-GIST_API_URL = f'https://re-ghapi.dsdog.tk/gists/{GIST_ID}'
+GIST_API_URL = f'https://api.github.com/gists/{GIST_ID}'
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 # 读取要上传的文件
 config_file_path = 'clash_config.yaml'
